@@ -34,7 +34,6 @@ export const SubjectsScreen: React.FC = () => {
     updateUnit,
     deleteUnit,
     reorderUnit,
-    createTopic,
     updateTopic,
     deleteTopic,
     reorderTopic,
@@ -62,8 +61,6 @@ export const SubjectsScreen: React.FC = () => {
   const [editingUnitTitle, setEditingUnitTitle] = useState('');
 
   // Topic creation / inline edit state
-  const [newTopicTitle, setNewTopicTitle] = useState('');
-  const [addingTopicUnitId, setAddingTopicUnitId] = useState<string | null>(null);
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
   const [editingTopicTitle, setEditingTopicTitle] = useState('');
 
@@ -150,13 +147,6 @@ export const SubjectsScreen: React.FC = () => {
     }
   };
 
-  const handleCreateTopic = (unitId: string, subId: string) => {
-    if (!newTopicTitle.trim()) return;
-    createTopic(unitId, subId, newTopicTitle.trim());
-    setNewTopicTitle('');
-    setAddingTopicUnitId(null);
-  };
-
   const handleStartEditTopic = (topicId: string, currentTitle: string) => {
     setEditingTopicId(topicId);
     setEditingTopicTitle(currentTitle);
@@ -223,14 +213,6 @@ export const SubjectsScreen: React.FC = () => {
     });
   };
 
-  const handleAddPreviewTopic = (unitIndex: number, newTopic: string) => {
-    if (!newTopic.trim()) return;
-    setPreviewUnits((prev) => {
-      const copy = [...prev];
-      copy[unitIndex] = { ...copy[unitIndex], topics: [...copy[unitIndex].topics, newTopic.trim()] };
-      return copy;
-    });
-  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -429,20 +411,6 @@ export const SubjectsScreen: React.FC = () => {
                             </div>
                           ))}
 
-                          <div className="flex gap-2 pt-1">
-                            <input
-                              type="text"
-                              placeholder="+ Add topic..."
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleAddPreviewTopic(uIdx, e.currentTarget.value);
-                                  e.currentTarget.value = '';
-                                }
-                              }}
-                              className="px-2.5 py-1 bg-slate-900/40 border border-dashed border-slate-800 rounded text-xs text-slate-400 focus:outline-none"
-                            />
-                          </div>
                         </div>
                       </div>
                     ))
@@ -596,7 +564,7 @@ export const SubjectsScreen: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                         <Layers className="w-4 h-4 text-slate-500" />
-                        Syllabus Units ({subUnits.length})
+                        Syllabus Chapters ({subUnits.length})
                       </h4>
                       <div className="flex items-center gap-2">
                         <button
@@ -611,7 +579,7 @@ export const SubjectsScreen: React.FC = () => {
                           className="text-xs text-blue-400 hover:text-blue-300 font-medium inline-flex items-center gap-1"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          Add Unit
+                          Add Chapter
                         </button>
                       </div>
                     </div>
@@ -620,7 +588,7 @@ export const SubjectsScreen: React.FC = () => {
                       <div className="flex gap-2 p-3 bg-slate-800/60 rounded-xl border border-slate-700/60">
                         <input
                           type="text"
-                          placeholder="Unit title (e.g. Unit 1: Graph Algorithms)"
+                          placeholder="Chapter title (e.g. Chapter 1: Graph Algorithms)"
                           value={newUnitTitle}
                           onChange={(e) => setNewUnitTitle(e.target.value)}
                           className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:outline-none"
@@ -705,7 +673,7 @@ export const SubjectsScreen: React.FC = () => {
                                 )}
                               </div>
 
-                              {/* Right side: Reorder + Edit + Add Topic + Delete */}
+                              {/* Right side: Reorder + Edit + Delete */}
                               <div className="flex items-center gap-1 shrink-0">
                                 <button
                                   onClick={() => reorderUnit(sub.id, unit.id, 'up')}
@@ -731,13 +699,6 @@ export const SubjectsScreen: React.FC = () => {
                                   <Edit2 className="w-3.5 h-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => setAddingTopicUnitId(unit.id)}
-                                  className="text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-0.5 px-2 py-1 rounded hover:bg-slate-800"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                  <span className="hidden sm:inline">Topic</span>
-                                </button>
-                                <button
                                   onClick={() => handleDeleteUnitWithConfirm(unit.id, unit.title)}
                                   className="p-1 text-slate-500 hover:text-rose-400 rounded hover:bg-slate-800"
                                   title="Delete unit"
@@ -746,31 +707,6 @@ export const SubjectsScreen: React.FC = () => {
                                 </button>
                               </div>
                             </div>
-
-                            {/* Add Topic Input */}
-                            {addingTopicUnitId === unit.id && (
-                              <div className="flex gap-2 mt-2 pt-2 border-t border-slate-800">
-                                <input
-                                  type="text"
-                                  placeholder="Topic name (e.g. Dijkstra's Algorithm)"
-                                  value={newTopicTitle}
-                                  onChange={(e) => setNewTopicTitle(e.target.value)}
-                                  className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:outline-none"
-                                />
-                                <button
-                                  onClick={() => handleCreateTopic(unit.id, sub.id)}
-                                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold"
-                                >
-                                  Add
-                                </button>
-                                <button
-                                  onClick={() => setAddingTopicUnitId(null)}
-                                  className="px-2 py-1.5 text-slate-400 text-xs"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            )}
 
                             {/* Topics List */}
                             {isUnitExpanded && (
