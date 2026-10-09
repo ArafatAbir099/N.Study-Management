@@ -1,0 +1,6 @@
+{
+  "name": "Semester Study OS",
+  "description": "A university study operating system with reliable spaced repetition revision lifecycle, exam management, and daily task planner.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
