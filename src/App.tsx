@@ -1,7 +1,6 @@
 import React from 'react';
 import { PlannerProvider, usePlanner } from './context/PlannerContext';
 import { DashboardScreen } from './components/screens/DashboardScreen';
-import { RevisionScreen } from './components/screens/RevisionScreen';
 import { SubjectsScreen } from './components/screens/SubjectsScreen';
 import { CalendarScreen } from './components/screens/CalendarScreen';
 import { ExamsScreen } from './components/screens/ExamsScreen';
@@ -17,7 +16,6 @@ import { AIStudyAssistantModal } from './components/assistant/AIStudyAssistantMo
 import { ActiveScreen } from './types';
 import {
   LayoutDashboard,
-  RotateCw,
   BookOpen,
   Calendar,
   AlertCircle,
@@ -52,7 +50,6 @@ const MainLayout: React.FC = () => {
   const navItems: { screen: ActiveScreen; label: string; icon: React.FC<{ className?: string }> }[] = [
     { screen: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { screen: 'tasks', label: "Daily Study", icon: BookOpen },
-    { screen: 'revisions', label: 'Revisions', icon: RotateCw },
     { screen: 'subjects', label: 'Subjects', icon: BookOpen },
     { screen: 'exams', label: 'Exams', icon: AlertCircle },
     { screen: 'calendar', label: 'Schedule', icon: Calendar },
@@ -184,7 +181,6 @@ const MainLayout: React.FC = () => {
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
           {activeScreen === 'dashboard' && <DashboardScreen />}
           {activeScreen === 'tasks' && <CalendarScreen />}
-          {activeScreen === 'revisions' && <RevisionScreen />}
           {activeScreen === 'subjects' && <SubjectsScreen />}
           {activeScreen === 'exams' && <ExamsScreen />}
           {activeScreen === 'calendar' && <CalendarScreen />}

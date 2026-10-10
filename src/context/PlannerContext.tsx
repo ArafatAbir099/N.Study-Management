@@ -20,6 +20,7 @@ import {
   reconcileRevisionsOnNewExam,
   toggleRevisionCompletion,
   getNextExamForSubject,
+  getRevisionStatus,
 } from '../util/revisionLifecycle';
 import {
   StorageState,
@@ -32,7 +33,6 @@ import { autoPlanAllExams } from '../util/revisionPlanner';
 import { exportBackup, validateAndParseBackup } from '../util/backup';
 import { getUserStorageKey } from '../util/security';
 import { migrateLegacyStorageForUser } from '../util/migrations';
-import { ParsedUnit } from '../util/syllabusParser';
 
 interface PlannerContextType {
   // Auth
@@ -74,10 +74,8 @@ interface PlannerContextType {
   updateSubject: (id: string, updates: Partial<Subject>) => void;
   deleteSubject: (id: string) => void;
 
-  // Syllabus Import & Management
-  importSyllabus: (subjectId: string, parsedUnits: ParsedUnit[]) => void;
+  // Chapter (Unit) Management
   reorderUnit: (subjectId: string, unitId: string, direction: 'up' | 'down') => void;
-  reorderTopic: (unitId: string, topicId: string, direction: 'up' | 'down') => void;
 
   // Unit CRUD
   createUnit: (subjectId: string, title: string, unitNumber?: number) => Unit;
@@ -96,7 +94,7 @@ interface PlannerContextType {
   deleteExam: (id: string) => void;
 
   // Study Task CRUD
-  createStudyTask: (data: { title: string; subjectId: string; scheduledDate: string; estimatedMinutes?: number; unitId?: string; topicId?: string; notes?: string }) => StudyTask;
+  createStudyTask: (data: { title: string; subjectId: string; scheduledDate: string; estimatedMinutes?: number; unitId?: string; topicId?: string; notes?: string; taskType?: 'study' | 'revision' }) => StudyTask;
   updateStudyTask: (id: string, updates: Partial<StudyTask>) => void;
   deleteStudyTask: (id: string) => void;
   completeStudyTask: (id: string, isCompleted: boolean, understanding?: 'weak' | 'okay' | 'strong') => void;
@@ -611,106 +609,6 @@ export const PlannerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   }, [rawUnits]);
 
-  // Reorder Topics
-  const reorderTopic = useCallback((unitId: string, topicId: string, direction: 'up' | 'down') => {
-    setTopics((prev) => {
-      const unitTopics = prev.filter((t) => t.unitId === unitId);
-      const index = unitTopics.findIndex((t) => t.id === topicId);
-      if (index === -1) return prev;
-
-      const targetIndex = direction === 'up' ? index - 1 : index + 1;
-      if (targetIndex < 0 || targetIndex >= unitTopics.length) return prev;
-
-      const swappedTopics = [...unitTopics];
-      const temp = swappedTopics[index];
-      swappedTopics[index] = swappedTopics[targetIndex];
-      swappedTopics[targetIndex] = temp;
-
-      // Rebuild entire topics list preserving new unit order
-      const otherTopics = prev.filter((t) => t.unitId !== unitId);
-      return [...otherTopics, ...swappedTopics];
-    });
-  }, []);
-
-  // --- SYLLABUS IMPORT (PHASE A.2) ---
-  const importSyllabus = useCallback((subjectId: string, parsedUnits: ParsedUnit[]) => {
-    if (!selectedSemesterId) return;
-    const now = new Date().toISOString();
-
-    const existingSubjectUnits = rawUnits.filter((u) => u.subjectId === subjectId);
-    let maxUnitNum = existingSubjectUnits.reduce((max, u) => Math.max(max, u.unitNumber || 0), 0);
-
-    const newUnitsToAdd: Unit[] = [];
-    const newTopicsToAdd: Topic[] = [];
-
-    for (const pUnit of parsedUnits) {
-      if (!pUnit.title.trim()) continue;
-
-      // Case-insensitive match for unit title
-      let targetUnit = existingSubjectUnits.find(
-        (u) => u.title.trim().toLowerCase() === pUnit.title.trim().toLowerCase()
-      );
-
-      if (!targetUnit) {
-        targetUnit = newUnitsToAdd.find(
-          (u) => u.title.trim().toLowerCase() === pUnit.title.trim().toLowerCase()
-        );
-      }
-
-      if (!targetUnit) {
-        maxUnitNum += 1;
-        targetUnit = {
-          id: generateId('unit'),
-          userId,
-          semesterId: selectedSemesterId,
-          subjectId,
-          unitNumber: maxUnitNum,
-          title: pUnit.title.trim(),
-          createdAt: now,
-          updatedAt: now,
-        };
-        newUnitsToAdd.push(targetUnit);
-      }
-
-      // Check existing topics under this unit
-      const existingUnitTopics = rawTopics.filter((t) => t.unitId === targetUnit!.id);
-
-      for (const topicTitle of pUnit.topics) {
-        const cleanTopic = topicTitle.trim();
-        if (!cleanTopic) continue;
-
-        const alreadyExists =
-          existingUnitTopics.some((t) => t.title.toLowerCase() === cleanTopic.toLowerCase()) ||
-          newTopicsToAdd.some(
-            (t) => t.unitId === targetUnit!.id && t.title.toLowerCase() === cleanTopic.toLowerCase()
-          );
-
-        if (!alreadyExists) {
-          const newTopic: Topic = {
-            id: generateId('topic'),
-            userId,
-            semesterId: selectedSemesterId,
-            subjectId,
-            unitId: targetUnit!.id,
-            title: cleanTopic,
-            isCompleted: false,
-            createdAt: now,
-            updatedAt: now,
-          };
-          newTopicsToAdd.push(newTopic);
-        }
-      }
-    }
-
-    // Atomic update
-    if (newUnitsToAdd.length > 0) {
-      setUnits((prev) => [...prev, ...newUnitsToAdd]);
-    }
-    if (newTopicsToAdd.length > 0) {
-      setTopics((prev) => [...prev, ...newTopicsToAdd]);
-    }
-  }, [selectedSemesterId, userId, rawUnits, rawTopics]);
-
   // --- TOPIC CRUD ---
   const createTopic = useCallback((unitId: string, subjectId: string, title: string): Topic => {
     if (!selectedSemesterId) throw new Error('No semester selected.');
@@ -859,6 +757,7 @@ export const PlannerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     unitId?: string;
     topicId?: string;
     notes?: string;
+    taskType?: 'study' | 'revision';
   }): StudyTask => {
     if (!selectedSemesterId) throw new Error('No semester selected.');
     const now = new Date().toISOString();
@@ -869,6 +768,7 @@ export const PlannerProvider: React.FC<{ children: React.ReactNode }> = ({ child
       subjectId: data.subjectId,
       unitId: data.unitId,
       topicId: data.topicId,
+      taskType: data.taskType || 'study',
       title: data.title,
       scheduledDate: data.scheduledDate || getTodayString(),
       estimatedMinutes: data.estimatedMinutes || 45,
@@ -917,43 +817,79 @@ export const PlannerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setTasks((prev) => prev.map((t) => (t.id === id ? updatedTask : t)));
 
     if (isCompleted) {
-      // Find nearest upcoming exam for subject
-      const subject = rawSubjects.find((s) => s.id === task.subjectId);
-      const completionDate = updatedTask.completedAt ? updatedTask.completedAt.slice(0, 10) : getTodayString();
-      const nextExam = getNextExamForSubject(rawExams, subject, completionDate);
-      let examDate = nextExam?.examDate || null;
-      let examId = nextExam?.id || null;
+      if (task.taskType === 'revision') {
+        // Find nearest due or overdue scheduled revision for the same chapter
+        const today = getTodayString();
+        const pendingRevsForChapter = rawRevisions.filter((r) => {
+          if (r.isCompleted) return false;
+          if (task.unitId && r.unitId === task.unitId) return true;
+          if (task.topicId && r.topicId === task.topicId) return true;
+          return false;
+        });
 
-      // Never store a synthetic id: create the real exam record first
-      if (nextExam && nextExam.id.startsWith('synthetic_exam_')) {
-        const realExam: Exam = {
-          id: generateId('exam'),
-          userId,
-          semesterId: nextExam.semesterId,
-          subjectId: nextExam.subjectId,
-          title: nextExam.title,
-          examDate: nextExam.examDate,
-          autoCreated: true,
-          createdAt: nowIso,
-          updatedAt: nowIso,
-        };
-        setExams((prev) => [...prev, realExam]);
-        examId = realExam.id;
+        if (pendingRevsForChapter.length > 0) {
+          // Sort: overdue first, then today, then upcoming (by scheduledDate ascending)
+          pendingRevsForChapter.sort((a, b) => {
+            const statusA = getRevisionStatus(a, today);
+            const statusB = getRevisionStatus(b, today);
+            const order: Record<string, number> = { overdue: 0, today: 1, upcoming: 2, completed: 3 };
+            if (order[statusA] !== order[statusB]) {
+              return (order[statusA] ?? 2) - (order[statusB] ?? 2);
+            }
+            return a.scheduledDate.localeCompare(b.scheduledDate);
+          });
+
+          const matchingRev = pendingRevsForChapter[0];
+          // Mark matching scheduled revision completed (never creates nested revisions)
+          setRevisions((prevRevs) =>
+            prevRevs.map((r) =>
+              r.id === matchingRev.id
+                ? { ...r, isCompleted: true, completedAt: nowIso, updatedAt: nowIso }
+                : r
+            )
+          );
+        }
+      } else {
+        // Normal Study task: auto-create revision schedule
+        const subject = rawSubjects.find((s) => s.id === task.subjectId);
+        const completionDate = updatedTask.completedAt ? updatedTask.completedAt.slice(0, 10) : getTodayString();
+        const nextExam = getNextExamForSubject(rawExams, subject, completionDate);
+        let examDate = nextExam?.examDate || null;
+        let examId = nextExam?.id || null;
+
+        // Never store a synthetic id: create the real exam record first
+        if (nextExam && nextExam.id.startsWith('synthetic_exam_')) {
+          const realExam: Exam = {
+            id: generateId('exam'),
+            userId,
+            semesterId: nextExam.semesterId,
+            subjectId: nextExam.subjectId,
+            title: nextExam.title,
+            examDate: nextExam.examDate,
+            autoCreated: true,
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          };
+          setExams((prev) => [...prev, realExam]);
+          examId = realExam.id;
+        }
+
+        setRevisions((prevRevs) => {
+          const newRevs = createRevisionsForTask(updatedTask, prevRevs, examDate, examId);
+          return [...prevRevs, ...newRevs];
+        });
       }
-
-      setRevisions((prevRevs) => {
-        const newRevs = createRevisionsForTask(updatedTask, prevRevs, examDate, examId);
-        return [...prevRevs, ...newRevs];
-      });
 
       if (task.topicId) {
         toggleTopicCompletion(task.topicId, true);
       }
     } else {
-      // Phase C.7: Un-completing deletes pending (not completed) revisions
-      setRevisions((prevRevs) =>
-        prevRevs.filter((r) => !(r.studyTaskId === id && !r.isCompleted))
-      );
+      // Un-completing deletes pending (not completed) revisions for study tasks
+      if (task.taskType !== 'revision') {
+        setRevisions((prevRevs) =>
+          prevRevs.filter((r) => !(r.studyTaskId === id && !r.isCompleted))
+        );
+      }
 
       // Reset topic back to incomplete if no OTHER completed task exists for that topic
       if (task.topicId) {
@@ -1062,9 +998,7 @@ export const PlannerProvider: React.FC<{ children: React.ReactNode }> = ({ child
     createSubject,
     updateSubject,
     deleteSubject,
-    importSyllabus,
     reorderUnit,
-    reorderTopic,
     createUnit,
     updateUnit,
     deleteUnit,

@@ -70,6 +70,18 @@ export function autoPlanAllExams(
     const subjectUnits = units.filter((u) => u.subjectId === subject.id);
     const unitIdSet = new Set(subjectUnits.map((u) => u.id));
 
+    // Active uncompleted unit tasks
+    const activePendingUnitIds = new Set(
+      existingTasks
+        .filter((t) => !t.isCompleted && t.unitId)
+        .map((t) => t.unitId as string)
+    );
+    const studiedUnitIds = new Set(
+      existingTasks
+        .filter((t) => t.isCompleted && t.unitId && t.taskType !== 'revision')
+        .map((t) => t.unitId as string)
+    );
+
     const pendingTopics = topics.filter(
       (t) =>
         unitIdSet.has(t.unitId) &&
@@ -77,7 +89,23 @@ export function autoPlanAllExams(
         !activePendingTaskTopicIds.has(t.id)
     );
 
-    if (pendingTopics.length === 0) continue;
+    // If no topics exist, plan unstudied chapters (units)
+    const itemsToPlan: Array<{ unitId: string; topicId?: string; title: string }> = [];
+
+    if (pendingTopics.length > 0) {
+      for (const t of pendingTopics) {
+        itemsToPlan.push({ unitId: t.unitId, topicId: t.id, title: t.title });
+      }
+    } else {
+      const pendingUnits = subjectUnits.filter(
+        (u) => !studiedUnitIds.has(u.id) && !activePendingUnitIds.has(u.id)
+      );
+      for (const u of pendingUnits) {
+        itemsToPlan.push({ unitId: u.id, title: u.title });
+      }
+    }
+
+    if (itemsToPlan.length === 0) continue;
 
     // Study buffer: up to (examDate - 3 days)
     let lastStudyDate = addDays(exam.examDate, -3);
@@ -87,27 +115,25 @@ export function autoPlanAllExams(
     }
 
     const availableDaysCount = Math.max(1, diffDays(lastStudyDate, today) + 1);
-    const maxComfortableTopics = availableDaysCount * 3;
+    const maxComfortableItems = availableDaysCount * 3;
 
-    let topicsPerDay = 1;
-    let isCramming = false;
+    let itemsPerDay = 1;
 
-    if (pendingTopics.length > maxComfortableTopics) {
-      isCramming = true;
-      topicsPerDay = Math.ceil(pendingTopics.length / availableDaysCount);
+    if (itemsToPlan.length > maxComfortableItems) {
+      itemsPerDay = Math.ceil(itemsToPlan.length / availableDaysCount);
       warnings.push(
-        `High workload warning for ${subject.code || subject.name}: ${pendingTopics.length} topics scheduled across ${availableDaysCount} day(s) before exam (${topicsPerDay} topics/day).`
+        `High workload warning for ${subject.code || subject.name}: ${itemsToPlan.length} chapters scheduled across ${availableDaysCount} day(s) before exam (${itemsPerDay}/day).`
       );
     } else {
       // Distribute evenly with max 3 per day
-      topicsPerDay = Math.min(3, Math.max(1, Math.ceil(pendingTopics.length / availableDaysCount)));
+      itemsPerDay = Math.min(3, Math.max(1, Math.ceil(itemsToPlan.length / availableDaysCount)));
     }
 
     let currentDayIndex = 0;
     let scheduledOnCurrentDay = 0;
 
-    for (const topic of pendingTopics) {
-      if (scheduledOnCurrentDay >= topicsPerDay && currentDayIndex < availableDaysCount - 1) {
+    for (const item of itemsToPlan) {
+      if (scheduledOnCurrentDay >= itemsPerDay && currentDayIndex < availableDaysCount - 1) {
         currentDayIndex++;
         scheduledOnCurrentDay = 0;
       }
@@ -120,9 +146,10 @@ export function autoPlanAllExams(
         userId: semester.userId,
         semesterId: semester.id,
         subjectId: subject.id,
-        unitId: topic.unitId,
-        topicId: topic.id,
-        title: `Study: ${topic.title}`,
+        unitId: item.unitId,
+        topicId: item.topicId,
+        taskType: 'study',
+        title: `Study: ${item.title}`,
         scheduledDate,
         estimatedMinutes: 45,
         isCompleted: false,
@@ -131,7 +158,10 @@ export function autoPlanAllExams(
       };
 
       createdTasks.push(newTask);
-      activePendingTaskTopicIds.add(topic.id);
+      if (item.topicId) {
+        activePendingTaskTopicIds.add(item.topicId);
+      }
+      activePendingUnitIds.add(item.unitId);
       scheduledOnCurrentDay++;
       totalPlannedTopics++;
     }

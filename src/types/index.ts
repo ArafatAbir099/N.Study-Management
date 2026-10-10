@@ -76,8 +76,9 @@ export interface StudyTask {
   userId: string;
   semesterId: string;
   subjectId: string;
-  unitId?: string;
+  unitId?: string; // Chapter ID
   topicId?: string;
+  taskType?: 'study' | 'revision'; // 'study' (Normal Study) | 'revision' (Revision)
   title: string;
   scheduledDate: string; // YYYY-MM-DD
   estimatedMinutes: number;
@@ -134,7 +135,6 @@ export interface DailyActivity {
 export type ActiveScreen = 
   | 'dashboard'
   | 'tasks'
-  | 'revisions'
   | 'subjects'
   | 'exams'
   | 'calendar'

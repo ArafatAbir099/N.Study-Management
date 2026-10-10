@@ -5,14 +5,14 @@ import { getTodayString } from '../../util/dateUtils';
 import { StudyTaskFields } from '../shared/StudyTaskFields';
 
 export const QuickAddModal: React.FC = () => {
-  const { isQuickAddOpen, setQuickAddOpen, subjects, topics, createStudyTask, createExam } = usePlanner();
+  const { isQuickAddOpen, setQuickAddOpen, subjects, createStudyTask, createExam } = usePlanner();
   const [tab, setTab] = useState<'task' | 'exam'>('task');
 
   // Task form
   const [taskTitle, setTaskTitle] = useState('');
   const [taskSubjectId, setTaskSubjectId] = useState('');
   const [taskUnitId, setTaskUnitId] = useState('');
-  const [taskSelectedTopicIds, setTaskSelectedTopicIds] = useState<string[]>([]);
+  const [taskType, setTaskType] = useState<'study' | 'revision'>('study');
   const [taskDate, setTaskDate] = useState(getTodayString());
   const [taskMinutes, setTaskMinutes] = useState(45);
 
@@ -27,43 +27,19 @@ export const QuickAddModal: React.FC = () => {
     e.preventDefault();
     if (!taskSubjectId) return;
 
-    if (taskSelectedTopicIds.length > 1) {
-      for (const tId of taskSelectedTopicIds) {
-        const topicObj = topics.find((t) => t.id === tId);
-        createStudyTask({
-          title: `Study: ${topicObj?.title || 'Topic'}`,
-          subjectId: taskSubjectId,
-          unitId: taskUnitId || undefined,
-          topicId: tId,
-          scheduledDate: taskDate,
-          estimatedMinutes: taskMinutes,
-        });
-      }
-    } else if (taskSelectedTopicIds.length === 1) {
-      const tId = taskSelectedTopicIds[0];
-      const topicObj = topics.find((t) => t.id === tId);
-      createStudyTask({
-        title: taskTitle.trim() || `Study: ${topicObj?.title || 'Topic'}`,
-        subjectId: taskSubjectId,
-        unitId: taskUnitId || undefined,
-        topicId: tId,
-        scheduledDate: taskDate,
-        estimatedMinutes: taskMinutes,
-      });
-    } else {
-      if (!taskTitle.trim()) return;
-      createStudyTask({
-        title: taskTitle.trim(),
-        subjectId: taskSubjectId,
-        unitId: taskUnitId || undefined,
-        scheduledDate: taskDate,
-        estimatedMinutes: taskMinutes,
-      });
-    }
+    if (!taskTitle.trim()) return;
+    createStudyTask({
+      title: taskTitle.trim(),
+      subjectId: taskSubjectId,
+      unitId: taskUnitId || undefined,
+      taskType,
+      scheduledDate: taskDate,
+      estimatedMinutes: taskMinutes,
+    });
 
     setTaskTitle('');
     setTaskUnitId('');
-    setTaskSelectedTopicIds([]);
+    setTaskType('study');
     setQuickAddOpen(false);
   };
 
@@ -127,8 +103,8 @@ export const QuickAddModal: React.FC = () => {
               onSubjectChange={setTaskSubjectId}
               unitId={taskUnitId}
               onUnitChange={setTaskUnitId}
-              selectedTopicIds={taskSelectedTopicIds}
-              onSelectedTopicIdsChange={setTaskSelectedTopicIds}
+              taskType={taskType}
+              onTaskTypeChange={setTaskType}
               title={taskTitle}
               onTitleChange={setTaskTitle}
               scheduledDate={taskDate}
@@ -164,9 +140,7 @@ export const QuickAddModal: React.FC = () => {
                 type="submit"
                 className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-blue-600/20 cursor-pointer"
               >
-                {taskSelectedTopicIds.length > 1
-                  ? `Create ${taskSelectedTopicIds.length} Study Tasks`
-                  : 'Create Study Task'}
+                Create Task ({taskType === 'study' ? 'Normal Study' : 'Revision'})
               </button>
             </div>
           </form>
@@ -214,7 +188,7 @@ export const QuickAddModal: React.FC = () => {
             <div className="pt-2">
               <button
                 type="submit"
-                className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-amber-600/20"
+                className="w-full py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-amber-600/20 cursor-pointer"
               >
                 Create Exam
               </button>

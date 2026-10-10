@@ -31,6 +31,7 @@ import {
 import { StudyTask, RevisionRecord, Exam, Semester, Subject, Unit, Topic } from '../src/types';
 import { runSyllabusParserTests } from './syllabusParser.test';
 import { runBreadcrumbTests } from './breadcrumb.test';
+import { runProgressMathTests } from './progressMath.test';
 
 let passedTests = 0;
 let totalTests = 0;
@@ -452,6 +453,9 @@ export function runAllTests() {
 
   // Run breadcrumb utility tests
   runBreadcrumbTests();
+
+  // Run progress math and study vs revision tests
+  runProgressMathTests();
 
   console.log('\n======================================================');
   console.log(`ALL ${totalTests} REVISION & LIFECYCLE TESTS PASSED SUCCESSFULLY! (${passedTests}/${totalTests})`);

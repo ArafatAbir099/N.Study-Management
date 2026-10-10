@@ -21,7 +21,6 @@ export const CalendarScreen: React.FC = () => {
     subjects,
     units,
     topics,
-    selectedSemester,
     createStudyTask,
     deleteStudyTask,
     completeStudyTask,
@@ -34,7 +33,7 @@ export const CalendarScreen: React.FC = () => {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskSubId, setNewTaskSubId] = useState('');
   const [newTaskUnitId, setNewTaskUnitId] = useState('');
-  const [newTaskSelectedTopicIds, setNewTaskSelectedTopicIds] = useState<string[]>([]);
+  const [newTaskType, setNewTaskType] = useState<'study' | 'revision'>('study');
   const [newTaskMinutes, setNewTaskMinutes] = useState(45);
   const [autoPlanMessage, setAutoPlanMessage] = useState<string | null>(null);
 
@@ -44,45 +43,20 @@ export const CalendarScreen: React.FC = () => {
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskSubId) return;
+    if (!newTaskSubId || !newTaskTitle.trim()) return;
 
-    if (newTaskSelectedTopicIds.length > 1) {
-      for (const tId of newTaskSelectedTopicIds) {
-        const topicObj = topics.find((t) => t.id === tId);
-        createStudyTask({
-          title: `Study: ${topicObj?.title || 'Topic'}`,
-          subjectId: newTaskSubId,
-          unitId: newTaskUnitId || undefined,
-          topicId: tId,
-          scheduledDate: selectedDate,
-          estimatedMinutes: newTaskMinutes,
-        });
-      }
-    } else if (newTaskSelectedTopicIds.length === 1) {
-      const tId = newTaskSelectedTopicIds[0];
-      const topicObj = topics.find((t) => t.id === tId);
-      createStudyTask({
-        title: newTaskTitle.trim() || `Study: ${topicObj?.title || 'Topic'}`,
-        subjectId: newTaskSubId,
-        unitId: newTaskUnitId || undefined,
-        topicId: tId,
-        scheduledDate: selectedDate,
-        estimatedMinutes: newTaskMinutes,
-      });
-    } else {
-      if (!newTaskTitle.trim()) return;
-      createStudyTask({
-        title: newTaskTitle.trim(),
-        subjectId: newTaskSubId,
-        unitId: newTaskUnitId || undefined,
-        scheduledDate: selectedDate,
-        estimatedMinutes: newTaskMinutes,
-      });
-    }
+    createStudyTask({
+      title: newTaskTitle.trim(),
+      subjectId: newTaskSubId,
+      unitId: newTaskUnitId || undefined,
+      taskType: newTaskType,
+      scheduledDate: selectedDate,
+      estimatedMinutes: newTaskMinutes,
+    });
 
     setNewTaskTitle('');
     setNewTaskUnitId('');
-    setNewTaskSelectedTopicIds([]);
+    setNewTaskType('study');
     setAddTaskOpen(false);
   };
 
@@ -102,7 +76,7 @@ export const CalendarScreen: React.FC = () => {
             Daily Study Schedule
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Organize daily tasks. Completing a task automatically schedules spaced revisions.
+            Organize daily tasks. Completing a study task automatically schedules spaced revisions.
           </p>
         </div>
 
@@ -161,15 +135,15 @@ export const CalendarScreen: React.FC = () => {
       {isAddTaskOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <h2 className="text-lg font-bold text-white mb-4">Add Study Task</h2>
+            <h2 className="text-lg font-bold text-white mb-4">Add Daily Task</h2>
             <form onSubmit={handleCreateTask} className="space-y-4">
               <StudyTaskFields
                 subjectId={newTaskSubId}
                 onSubjectChange={setNewTaskSubId}
                 unitId={newTaskUnitId}
                 onUnitChange={setNewTaskUnitId}
-                selectedTopicIds={newTaskSelectedTopicIds}
-                onSelectedTopicIdsChange={setNewTaskSelectedTopicIds}
+                taskType={newTaskType}
+                onTaskTypeChange={setNewTaskType}
                 title={newTaskTitle}
                 onTitleChange={setNewTaskTitle}
                 scheduledDate={selectedDate}
@@ -177,7 +151,7 @@ export const CalendarScreen: React.FC = () => {
               />
 
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Estimated Duration (minutes)</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Estimated Duration (minutes)</label>
                 <input
                   type="number"
                   min="5"
@@ -200,9 +174,7 @@ export const CalendarScreen: React.FC = () => {
                   type="submit"
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium cursor-pointer"
                 >
-                  {newTaskSelectedTopicIds.length > 1
-                    ? `Schedule ${newTaskSelectedTopicIds.length} Tasks`
-                    : 'Schedule Task'}
+                  Schedule Task
                 </button>
               </div>
             </form>
@@ -230,6 +202,8 @@ export const CalendarScreen: React.FC = () => {
           filteredTasks.map((task) => {
             const sub = subjects.find((s) => s.id === task.subjectId);
             const breadcrumb = formatBreadcrumb(task.unitId, task.topicId, units, topics);
+            const isRevision = task.taskType === 'revision';
+
             return (
               <div
                 key={task.id}
@@ -259,14 +233,28 @@ export const CalendarScreen: React.FC = () => {
                   )}
 
                   <div className="min-w-0 flex-1">
-                    <p className={`text-sm font-semibold ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-100'}`}>
-                      {task.title}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={`text-sm font-semibold ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-100'}`}>
+                        {task.title}
+                      </p>
+                      {/* Study / Revision Badge */}
+                      {isRevision ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                          Revision
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                          Study
+                        </span>
+                      )}
+                    </div>
+
                     {breadcrumb && (
                       <p className="text-[11px] text-slate-500 font-normal truncate mt-0.5">
                         {breadcrumb}
                       </p>
                     )}
+
                     <div className="flex items-center gap-3 mt-1.5 text-xs text-slate-400 flex-wrap">
                       {sub && (
                         <span

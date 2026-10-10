@@ -11,11 +11,18 @@ import {
   CheckCircle2,
   Circle,
   ArrowRight,
-  Sparkles,
   AlertCircle,
   Clock,
   Layers,
+  Check,
+  Sparkles,
 } from 'lucide-react';
+import {
+  calculateSyllabusCoverage,
+  calculateMasteryScore,
+  calculateRevisionRetention,
+  calculateExamReadiness,
+} from '../../util/progressMath';
 
 export const DashboardScreen: React.FC = () => {
   const {
@@ -67,19 +74,24 @@ export const DashboardScreen: React.FC = () => {
     return subjects.find((s) => s.id === upcomingExam.subjectId) || null;
   }, [upcomingExam, subjects]);
 
-  // 4. Progress calculation
-  const totalTopics = topics.length;
-  const completedTopics = topics.filter((t) => t.isCompleted).length;
-  const topicProgressPct = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : 0;
+  // 4. Progress calculations
+  const coverage = useMemo(() => {
+    return calculateSyllabusCoverage(subjects, units, tasks, revisions, topics, today);
+  }, [subjects, units, tasks, revisions, topics, today]);
 
-  const totalTasksToday = todayTasks.length;
-  const completedTasksToday = todayTasks.filter((t) => t.isCompleted).length;
+  const mastery = useMemo(() => {
+    return calculateMasteryScore(tasks);
+  }, [tasks]);
 
-  const totalRevsToday = todayRevisions.length;
-  const completedRevsToday = todayRevisions.filter((r) => r.isCompleted).length;
+  const retention = useMemo(() => {
+    return calculateRevisionRetention(units, subjects, revisions, tasks, topics, today);
+  }, [units, subjects, revisions, tasks, topics, today]);
+
+  const readiness = useMemo(() => {
+    return calculateExamReadiness(exams, subjects, units, tasks, revisions, null, topics, today);
+  }, [exams, subjects, units, tasks, revisions, topics, today]);
 
   // 5. ONE Primary Action
-  // "Start today's study" OR "Start daily revision"
   const primaryAction = useMemo(() => {
     if (pendingTasksToday.length > 0) {
       return {
@@ -91,9 +103,14 @@ export const DashboardScreen: React.FC = () => {
     }
     if (pendingRevisionsToday.length > 0) {
       return {
-        label: 'Start daily revision',
+        label: 'Complete daily revisions',
         subtext: `${pendingRevisionsToday.length} revision${pendingRevisionsToday.length > 1 ? 's' : ''} due`,
-        onClick: () => setActiveScreen('revisions'),
+        onClick: () => {
+          const revSection = document.getElementById('todays-revisions-section');
+          if (revSection) {
+            revSection.scrollIntoView({ behavior: 'smooth' });
+          }
+        },
         icon: RotateCw,
       };
     }
@@ -123,7 +140,7 @@ export const DashboardScreen: React.FC = () => {
             </p>
           </div>
 
-          {/* THE SINGLE PRIMARY ACTION BUTTON */}
+          {/* Primary Action Button */}
           <button
             onClick={primaryAction.onClick}
             className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-600/30 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
@@ -147,12 +164,14 @@ export const DashboardScreen: React.FC = () => {
               </div>
               <div>
                 <h2 className="font-semibold text-white text-base">Today&apos;s Study</h2>
-                <p className="text-xs text-slate-400">{completedTasksToday}/{totalTasksToday} completed</p>
+                <p className="text-xs text-slate-400">
+                  {todayTasks.filter((t) => t.isCompleted).length}/{todayTasks.length} completed
+                </p>
               </div>
             </div>
             <button
               onClick={() => setActiveScreen('tasks')}
-              className="text-xs text-blue-400 hover:text-blue-300 font-medium"
+              className="text-xs text-blue-400 hover:text-blue-300 font-medium cursor-pointer"
             >
               View all
             </button>
@@ -163,12 +182,14 @@ export const DashboardScreen: React.FC = () => {
               <div className="h-36 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-800 rounded-xl">
                 <BookOpen className="w-8 h-8 text-slate-600 mb-2" />
                 <p className="text-sm font-medium text-slate-400">No study tasks for today</p>
-                <p className="text-xs text-slate-500 mt-0.5">Use Quick Add or auto-plan to schedule study sessions</p>
+                <p className="text-xs text-slate-500 mt-0.5">Use Quick Add to schedule a study session</p>
               </div>
             ) : (
               todayTasks.map((task) => {
                 const sub = subjects.find((s) => s.id === task.subjectId);
                 const breadcrumb = formatBreadcrumb(task.unitId, task.topicId, units, topics);
+                const isRevision = task.taskType === 'revision';
+
                 return (
                   <div
                     key={task.id}
@@ -197,9 +218,22 @@ export const DashboardScreen: React.FC = () => {
                         </button>
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-100'}`}>
-                          {task.title}
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`text-sm font-medium ${task.isCompleted ? 'line-through text-slate-400' : 'text-slate-100'}`}>
+                            {task.title}
+                          </p>
+                          {/* Study / Revision Badge */}
+                          {isRevision ? (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                              Revision
+                            </span>
+                          ) : (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                              Study
+                            </span>
+                          )}
+                        </div>
+
                         {breadcrumb && (
                           <p className="text-[11px] text-slate-500 font-normal truncate mt-0.5">
                             {breadcrumb}
@@ -241,8 +275,8 @@ export const DashboardScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* SECTION 2: TODAY'S REVISION */}
-        <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col">
+        {/* SECTION 2: TODAY'S REVISION (With "Done" Button) */}
+        <div id="todays-revisions-section" className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col">
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">
@@ -250,14 +284,16 @@ export const DashboardScreen: React.FC = () => {
               </div>
               <div>
                 <h2 className="font-semibold text-white text-base">Today&apos;s Revision</h2>
-                <p className="text-xs text-slate-400">{completedRevsToday}/{totalRevsToday} completed</p>
+                <p className="text-xs text-slate-400">
+                  {todayRevisions.filter((r) => r.isCompleted).length}/{todayRevisions.length} completed
+                </p>
               </div>
             </div>
             <button
-              onClick={() => setActiveScreen('revisions')}
-              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
+              onClick={() => setActiveScreen('progress')}
+              className="text-xs text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer"
             >
-              View all
+              Retention stats
             </button>
           </div>
 
@@ -266,7 +302,7 @@ export const DashboardScreen: React.FC = () => {
               <div className="h-36 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-800 rounded-xl">
                 <RotateCw className="w-8 h-8 text-slate-600 mb-2" />
                 <p className="text-sm font-medium text-slate-400">No revisions due today</p>
-                <p className="text-xs text-slate-500 mt-0.5">Completing study tasks automatically triggers revision cycles</p>
+                <p className="text-xs text-slate-500 mt-0.5">Completing normal study tasks automatically triggers revision cycles</p>
               </div>
             ) : (
               todayRevisions.map((rev) => {
@@ -277,7 +313,7 @@ export const DashboardScreen: React.FC = () => {
                 return (
                   <div
                     key={rev.id}
-                    className={`flex items-start gap-3 p-3 rounded-xl border transition-all ${
+                    className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition-all ${
                       rev.isCompleted
                         ? 'bg-slate-950/40 border-slate-800/60 opacity-60'
                         : isOverdue
@@ -285,41 +321,57 @@ export const DashboardScreen: React.FC = () => {
                         : 'bg-slate-800/40 border-slate-700/60 hover:border-slate-600'
                     }`}
                   >
-                    <button
-                      onClick={() => completeRevision(rev.id, !rev.isCompleted)}
-                      className="mt-0.5 text-slate-400 hover:text-indigo-400 transition-colors"
-                      title={rev.isCompleted ? 'Mark incomplete' : 'Mark complete'}
-                    >
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`text-sm font-medium ${rev.isCompleted ? 'line-through text-slate-400' : 'text-slate-100'}`}>
+                            {rev.title}
+                          </p>
+                          {isOverdue && !rev.isCompleted && (
+                            <span className="text-[10px] px-1.5 py-0.2 bg-rose-500/20 text-rose-400 rounded font-medium">
+                              Overdue
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          {sub && (
+                            <span
+                              className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                              style={{ backgroundColor: `${sub.color}20`, color: sub.color }}
+                            >
+                              {sub.code || sub.name}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-slate-500">
+                            Rev #{rev.revisionNumber}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-mono">
+                            {rev.scheduledDate}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* PROMINENT "DONE" BUTTON */}
+                    <div className="shrink-0">
                       {rev.isCompleted ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                        <button
+                          onClick={() => completeRevision(rev.id, false)}
+                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer"
+                          title="Mark incomplete"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Completed</span>
+                        </button>
                       ) : (
-                        <Circle className="w-5 h-5" />
+                        <button
+                          onClick={() => completeRevision(rev.id, true)}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 transition-all cursor-pointer hover:scale-[1.02]"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Done</span>
+                        </button>
                       )}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className={`text-sm font-medium ${rev.isCompleted ? 'line-through text-slate-400' : 'text-slate-100'}`}>
-                          {rev.title}
-                        </p>
-                        {isOverdue && !rev.isCompleted && (
-                          <span className="text-[10px] px-1.5 py-0.2 bg-rose-500/20 text-rose-400 rounded font-medium">
-                            Overdue
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        {sub && (
-                          <span
-                            className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                            style={{ backgroundColor: `${sub.color}20`, color: sub.color }}
-                          >
-                            {sub.code || sub.name}
-                          </span>
-                        )}
-                        <span className="text-[11px] text-slate-500">
-                          Rev #{rev.revisionNumber}
-                        </span>
-                      </div>
                     </div>
                   </div>
                 );
@@ -342,7 +394,7 @@ export const DashboardScreen: React.FC = () => {
             </div>
             <button
               onClick={() => setActiveScreen('exams')}
-              className="text-xs text-amber-400 hover:text-amber-300 font-medium"
+              className="text-xs text-amber-400 hover:text-amber-300 font-medium cursor-pointer"
             >
               View all
             </button>
@@ -398,7 +450,7 @@ export const DashboardScreen: React.FC = () => {
           )}
         </div>
 
-        {/* SECTION 4: PROGRESS */}
+        {/* SECTION 4: PROGRESS (4 Core Metrics) */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
             <div className="flex items-center gap-2.5">
@@ -406,40 +458,59 @@ export const DashboardScreen: React.FC = () => {
                 <Layers className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="font-semibold text-white text-base">Progress</h2>
-                <p className="text-xs text-slate-400">Syllabus & daily mastery metrics</p>
+                <h2 className="font-semibold text-white text-base">Progress & Mastery</h2>
+                <p className="text-xs text-slate-400">Real calculated semester metrics</p>
               </div>
             </div>
             <button
               onClick={() => setActiveScreen('progress')}
-              className="text-xs text-emerald-400 hover:text-emerald-300 font-medium"
+              className="text-xs text-emerald-400 hover:text-emerald-300 font-medium cursor-pointer"
             >
-              Details
+              Full details
             </button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3.5">
+            {/* Syllabus Coverage Bar */}
             <div>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-slate-300 font-medium">Syllabus Mastery</span>
-                <span className="text-emerald-400 font-semibold">{topicProgressPct}% ({completedTopics}/{totalTopics} topics)</span>
+                <span className="text-slate-300 font-medium">Syllabus Coverage</span>
+                <span className="text-emerald-400 font-semibold">
+                  {coverage.isEmpty ? 'No chapters yet' : `${coverage.percentage}% (${coverage.studiedChapters}/${coverage.totalChapters} chaps)`}
+                </span>
               </div>
-              <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden">
+              <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
                 <div
-                  className="bg-emerald-500 h-2.5 rounded-full transition-all duration-500 ease-out"
-                  style={{ width: `${topicProgressPct}%` }}
+                  className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${coverage.percentage || 0}%` }}
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/40 text-center">
-                <span className="text-2xl font-bold text-blue-400">{completedTasksToday}</span>
-                <p className="text-[11px] text-slate-400 mt-0.5">Tasks Done Today</p>
+            {/* 3 Metric Mini Cards */}
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              {/* Mastery Score */}
+              <div className="bg-slate-800/40 p-2.5 rounded-xl border border-slate-700/40 text-center">
+                <span className="text-lg font-bold text-amber-400">
+                  {mastery.isEmpty ? '—' : `${mastery.percentage}%`}
+                </span>
+                <p className="text-[10px] text-slate-400 mt-0.5 truncate">Mastery</p>
               </div>
-              <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/40 text-center">
-                <span className="text-2xl font-bold text-indigo-400">{completedRevsToday}</span>
-                <p className="text-[11px] text-slate-400 mt-0.5">Revisions Done Today</p>
+
+              {/* Revision Retention */}
+              <div className="bg-slate-800/40 p-2.5 rounded-xl border border-slate-700/40 text-center">
+                <span className="text-lg font-bold text-indigo-400">
+                  {retention.isEmpty ? '—' : `${retention.percentage}%`}
+                </span>
+                <p className="text-[10px] text-slate-400 mt-0.5 truncate">Retention</p>
+              </div>
+
+              {/* Exam Readiness */}
+              <div className="bg-slate-800/40 p-2.5 rounded-xl border border-slate-700/40 text-center">
+                <span className="text-lg font-bold text-rose-400">
+                  {readiness.isEmpty ? '—' : `${readiness.percentage}%`}
+                </span>
+                <p className="text-[10px] text-slate-400 mt-0.5 truncate">Readiness</p>
               </div>
             </div>
           </div>
